@@ -54,7 +54,7 @@ df = load_data()
 tuned_model = load_xgb_model()
 sarima_model = get_sarima_model(df)
 
-st.write(f"Model type: {type(sarima_model)}")
+
 # -------------------------------
 # SIDEBAR
 # -------------------------------
@@ -163,4 +163,5 @@ with col1:
 with col2:
     st.metric("SARIMA MAE", "20.76")
     st.metric("SARIMA RMSE", "26.36")
+
 
