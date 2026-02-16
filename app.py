@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import pickle
+import joblib
 import matplotlib.pyplot as plt
 from statsmodels.tsa.statespace.sarimax import SARIMAX
 
@@ -19,7 +20,7 @@ st.write("SARIMA & XGBoost based Time Series Forecasting")
 @st.cache_data
 def load_data():
     df = pd.read_csv("AAPL.csv")   # use same CSV as notebook
-    df['Date'] = pd.to_datetime(df['Date'])
+    df['Date'] = pd.to_datetime(df['Date'], dayfirst=True)
     df.set_index('Date', inplace=True)
     return df
 
@@ -30,16 +31,18 @@ df = load_data()
 # -------------------------------
 @st.cache_resource
 def load_models():
-    with open("models/sarima_model.pkl", "rb") as f:
-        sarima_model = pickle.load(f)
+    #with open("models/sarima_model.pkl", "rb") as f:
+    #    sarima_model = pickle.load(f)
+    sarima_model = joblib.load("models/sarima_model.joblib")
 
-    with open("models/xgb_model.pkl", "rb") as f:
+    with open("models/xgboost_model.pkl", "rb") as f:
         tuned_model = pickle.load(f)
 
     return sarima_model, tuned_model
 
 sarima_model, tuned_model = load_models()
 
+st.write(f"Model type: {type(sarima_model)}")
 # -------------------------------
 # SIDEBAR
 # -------------------------------
@@ -98,24 +101,41 @@ if model_choice == "SARIMA":
 # XGBOOST PREDICTION
 # -------------------------------
 else:
-    # Same feature engineering logic as notebook
+    # 1. Recreate the features the model was trained on
     df_feat = df.copy()
+    
+    # Simple Moving Averages
+    df_feat['MA_5'] = df_feat['Close'].rolling(window=5).mean()
+    df_feat['MA_10'] = df_feat['Close'].rolling(window=10).mean()
+    
+    # Volatility (Standard Deviation of returns)
     df_feat['Returns'] = df_feat['Close'].pct_change()
+    df_feat['Volatility_5'] = df_feat['Returns'].rolling(window=5).std()
+    
+    # Momentum (Price difference)
+    df_feat['Momentum_5'] = df_feat['Close'] - df_feat['Close'].shift(5)
+    
+    # 2. Clean up NAs caused by rolling windows
     df_feat.dropna(inplace=True)
 
-    X = df_feat[['Returns']]
-    y = df_feat['Returns']
+    # 3. SELECT THE EXACT FEATURES IN THE EXACT ORDER
+    # The model expects these 9 specific columns
+    features = ['Open', 'High', 'Low', 'Adj Close', 'Volume', 'MA_5', 'MA_10', 'Volatility_5', 'Momentum_5']
+    X = df_feat[features]
 
+    # 4. Predict
+    # We take the most recent data to predict the next steps
     future_returns = tuned_model.predict(X.tail(forecast_days))
 
+    # --- Plotting logic remains the same ---
     fig, ax = plt.subplots(figsize=(10, 4))
-    ax.plot(y.tail(100).values, label="Actual Returns")
-    ax.plot(future_returns, label="XGBoost Predicted Returns")
+    ax.plot(df_feat['Returns'].tail(100).values, label="Actual Returns")
+    ax.plot(future_returns, label="XGBoost Predicted Returns", linestyle='--')
     ax.legend()
     st.pyplot(fig)
 
     st.write("📌 XGBoost Forecasted Returns")
-    st.dataframe(future_returns)
+    st.dataframe(pd.DataFrame(future_returns, columns=['Predicted Returns']))
 
 # -------------------------------
 # MODEL METRICS (STATIC FROM NOTEBOOK)
