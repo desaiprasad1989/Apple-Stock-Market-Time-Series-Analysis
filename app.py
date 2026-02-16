@@ -30,17 +30,29 @@ df = load_data()
 # LOAD MODELS
 # -------------------------------
 @st.cache_resource
-def load_models():
-    #with open("models/sarima_model.pkl", "rb") as f:
-    #    sarima_model = pickle.load(f)
-    sarima_model = joblib.load("models/sarima_model.joblib")
+def load_xgb_model():
+    # XGBoost is usually small enough to load from disk
+    return joblib.load("models/xgboost_model.pkl")
 
-    with open("models/xgboost_model.pkl", "rb") as f:
-        tuned_model = pickle.load(f)
+@st.cache_resource
+def get_sarima_model(_df):
+    # Fit SARIMA on the fly using your best parameters from the notebook
+    # Replace these orders with your actual tuned parameters
+    p, d, q = 1, 1, 1 
+    P, D, Q, s = 1, 1, 1, 12 
+    
+    model = SARIMAX(_df['Close'], 
+                    order=(p, d, q), 
+                    seasonal_order=(P, D, Q, s))
+    results = model.fit(disp=False)
+    return results
 
-    return sarima_model, tuned_model
+# Load data first
+df = load_data()
 
-sarima_model, tuned_model = load_models()
+# Initialize models
+tuned_model = load_xgb_model()
+sarima_model = get_sarima_model(df)
 
 st.write(f"Model type: {type(sarima_model)}")
 # -------------------------------
@@ -151,3 +163,4 @@ with col1:
 with col2:
     st.metric("SARIMA MAE", "20.76")
     st.metric("SARIMA RMSE", "26.36")
+
